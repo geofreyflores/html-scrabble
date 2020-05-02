@@ -49,7 +49,7 @@ $(document).ready(function() {
         var playerCount = 0;
         var firstEmptyPath;
         var playerNames = [];
-        for (var index = 0; index < 4; index++) {
+        for (var index = 0; index < 5; index++) {
             var namePath = 'input[name=name' + index +']';
             var name = $(namePath).val();
             var emailPath = 'input[name=email' + index +']';
@@ -60,22 +60,12 @@ $(document).ready(function() {
             if (!firstEmptyPath && !email) {
                 firstEmptyPath = emailPath;
             }
-            if (name && !email) {
-                $(emailPath).focus();
-                value = false;
-            } else if (email && !name) {
-                $(namePath).focus();
-                value = false;
-            } else if (name && email) {
-                setName(addressBook, name, email);
+
+            if (name) {
                 playerCount++;
-                if (_.contains(playerNames, name)) {
-                    return false;
-                }
-                playerNames.push(name);
+                if (!_contains(playerNames, name)) playerNames.push(name);
             }
         }
-        saveAddressBook(addressBook);
         return playerCount >= 2;
     });
     $('input').first().focus();

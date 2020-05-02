@@ -80,7 +80,8 @@ var io = io.listen(server);
 var db = new DB.DB(argv.database);
 
 app.use(methodOverride());
-app.use(bodyParser());
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
 app.use(cookieParser());
 app.use(express.static(__dirname + '/client'));
 app.use(errorhandler({
@@ -133,29 +134,26 @@ db.registerObject(Game);
 Game.create = function(language, players) {
     var game = new Game();
     game.language = language;
-    game.players = players;
     game.key = makeKey();
     game.letterBag = scrabble.LetterBag.create(language);
-    for (var i = 0; i < players.length; i++) {
-        var player = players[i];
+
+    // init players
+    game.players = players;
+    players.forEach((player, i) => {
         player.index = i;
-        player.rack = new scrabble.Rack(8);
-        for (var j = 0; j < 7; j++) {
-            player.rack.squares[j].tile = game.letterBag.getRandomTile();
-        }
         player.score = 0;
-    }
+        player.rack = new scrabble.Rack(8, game.letterBag);
+        player.key = makeKey();
+        player.link = game.makeLink(player);
+    });
     console.log('players', players);
+
     game.board = new scrabble.Board();
     game.turns = [];
     game.whosTurn = 0;
     game.passes = 0;
     game.save();
-    game.players.forEach(function (player) {
-        game.sendInvitation(player,
-                            'You have been invited to play Scrabble with '
-                            + joinProse(game.otherPlayers(player)));
-    });
+
     return game;
 }
 
@@ -166,13 +164,10 @@ Game.prototype.otherPlayers = function(player)
 
 Game.prototype.makeLink = function(player)
 {
-    var url = config.baseUrl + "game/" + this.key;
-    if (player) {
-        url += "/" + player.key;
-    }
-    return url;
+    let gameUrl = `/game/${this.key}`;
+    if (player) gameUrl += `/${player.key}`;
+    return gameUrl;
 }
-
 Game.prototype.sendInvitation = function(player, subject)
 {
     try {
@@ -193,7 +188,7 @@ Game.prototype.sendInvitation = function(player, subject)
     }
 }
 
-Game.prototype.save = function(key) {
+Game.prototype.save = function() {
     db.set(this.key, this);
 }
 
@@ -221,12 +216,10 @@ Game.prototype.notifyListeners = function(message, data) {
 }
 
 Game.prototype.lookupPlayer = function(req, suppressException) {
-    var playerKey = req.cookies[this.key];
-    for (var i in this.players) {
-        if (this.players[i].key == playerKey) {
-            return this.players[i];
-        }
-    }
+    const playerKey = req.cookies[this.key];
+    const player = this.players.find(p => p.key === playerKey);
+    if (player) return player;
+
     if (!suppressException) {
         throw "invalid player key " + playerKey + " for game " + this.key;
     }
@@ -567,6 +560,10 @@ Game.prototype.newConnection = function(socket, player) {
 var gameListAuth = basicAuth(function(username, password) {
     if (config.gameListLogin) {
         return username == config.gameListLogin.username && password == config.gameListLogin.password;
+    } else if (process.env.ADMIN_NAME) {
+        const userMatch = username === ADMIN_NAME;
+        const passMatch = process.env.ADMIN_PWD && (password === process.env.ADMIN_PWD) || true; // pwd optional
+        return userMatch && passMatch;
     } else {
         return true;
     }
@@ -574,23 +571,21 @@ var gameListAuth = basicAuth(function(username, password) {
 
 // Handlers //////////////////////////////////////////////////////////////////
 
-app.get("/games",
-        config.gameListLogin ? gameListAuth : function (req, res, next) { next(); },
-        function(req, res) {
-            res.send(db
-                     .all()
-                     .filter(function (game) {
-                         return !game.endMessage;
-                     })
-                     .map(function (game) {
-                         return { key: game.key,
-                                  players: game.players.map(function(player) {
-                                      return { name: player.name,
-                                               email: player.email,
-                                               key: player.key,
-                                               hasTurn: player == game.players[game.whosTurn]};
-                                  })};
-                     }));
+app.get("/games", 
+    config.gameListLogin ? gameListAuth : function (req, res, next) { next(); },
+    (req, res) => {
+    const games = db.all()
+        .filter(game => !game.endMessage)
+        .map(game => ({
+            key: game.key,
+            players: game.players.map(player => ({
+                name: player.name,
+                key: player.key,
+                link: req.hostname + player.link,
+                hasTurn: player == game.players[game.whosTurn]
+            }) )
+        }) );
+    res.send(games);
 });
 
 app.post("/send-game-reminders", function (req, res) {
@@ -608,32 +603,19 @@ app.post("/send-game-reminders", function (req, res) {
     res.send("Sent " + count + " reminder emails");
 });
 
-app.get("/game", function(req, res) {
-    res.sendfile(__dirname + '/client/make-game.html');
-});
+app.get("/create-game", (req, res) => res.sendfile(__dirname + '/client/make-game.html') );
 
 app.post("/game", function(req, res) {
-
-    var players = [];
-    [1, 2, 3, 4].forEach(function (x) {
-        var name = req.body['name' + x];
-        var email = req.body['email' + x];
-        console.log('name', name, 'email', email, 'params', req.params);
-        if (name && email) {
-            players.push({ name: name,
-                           email: email,
-                           key: makeKey() });
-        }
-    });
+    let playerNames = [1,2,3,4,5].map(i =>  req.body[`name${i}`]);
+    playerNames = [...new Set(playerNames)].filter(Boolean); // remove dupes and blank names
+    let players = playerNames.map(n => ({ name: n }));
 
     if (players.length < 2) {
         throw 'at least two players must participate in a game';
     }
 
-    console.log(players.length, 'players');
-    var game = Game.create(req.body.language || 'German', players);
-
-    res.redirect("/game/" + game.key + "/" + game.players[0].key);
+    var game = Game.create(req.body.language || 'English', players);
+    res.redirect(players[0].link);
 });
 
 function gameHandler(handler) {
@@ -682,7 +664,7 @@ app.get("/game/:gameKey", gameHandler(function (game, req, res, next) {
             res.send(icebox.freeze(response));
         },
         'html': function () {
-            res.sendfile(__dirname + '/client/game.html');
+            res.sendFile(__dirname + '/client/game.html');
         }
     });
 }));
@@ -708,6 +690,10 @@ app.post("/game/:gameKey", playerHandler(function(player, game, req, res) {
     case 'takeBack':
         tilesAndTurn = game.challengeOrTakeBackMove(req.body.command, player);
         break;
+    case 'drop':
+        game.ensurePlayerAndGame(player);
+        tilesAndTurn = game.pass(player);
+        break;
     case 'newGame':
         game.createFollowonGame(player);
         break;
@@ -715,8 +701,7 @@ app.post("/game/:gameKey", playerHandler(function(player, game, req, res) {
         throw 'unrecognized game PUT command: ' + body.command;
     }
     if (tilesAndTurn) {
-        var tiles = tilesAndTurn[0];
-        var turn = tilesAndTurn[1];
+        const [ tiles, turn ] = tilesAndTurn;
         var result = game.finishTurn(player, tiles, turn);
         res.send(icebox.freeze(result));
     }

@@ -496,13 +496,14 @@ Board.prototype.toString = function() {
     return "Board " + this.Dimension + " x " + this.Dimension;
 };
 
-function Rack(size) {
+function Rack(size, letterBag) {
     this.squares = [];
 
     for (var x = 0; x < size; x++) {
         var square = new Square('Normal', this);
         square.x = x;
         square.y = -1;
+        if (letterBag) square.tile = letterBag.getRandomTile();
         this.squares[x] = square;
     }
 
