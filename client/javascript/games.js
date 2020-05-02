@@ -1,6 +1,6 @@
 $(document).ready(function() {
     var table = $("table");
-    table.append(addCreateGameLink());
+    // table.append(addCreateGameLink());
     table.append(populateGamesList());
 });
 
