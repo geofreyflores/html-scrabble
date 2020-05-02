@@ -12,7 +12,7 @@ function populateGamesList() {
                 TD(null, gameNumber++),
                 game.players.map(function(player) {
                     return TD(null,
-                        A({ href: '/game/' + game.key + '/' + player.key },
+                        A({ href: '/game/' + game.key },
                             player.name))
                 }))
         }));

@@ -561,7 +561,7 @@ var gameListAuth = basicAuth(function(username, password) {
     if (config.gameListLogin) {
         return username == config.gameListLogin.username && password == config.gameListLogin.password;
     } else if (process.env.ADMIN_NAME) {
-        const userMatch = username === ADMIN_NAME;
+        const userMatch = username === process.env.ADMIN_NAME;
         const passMatch = process.env.ADMIN_PWD && (password === process.env.ADMIN_PWD) || true; // pwd optional
         return userMatch && passMatch;
     } else {
@@ -572,7 +572,7 @@ var gameListAuth = basicAuth(function(username, password) {
 // Handlers //////////////////////////////////////////////////////////////////
 
 app.get("/games", 
-    config.gameListLogin ? gameListAuth : function (req, res, next) { next(); },
+    // process.env.ADMIN_NAME ? gameListAuth : function (req, res, next) { next(); },
     (req, res) => {
     const games = db.all()
         .filter(game => !game.endMessage)
@@ -603,7 +603,9 @@ app.post("/send-game-reminders", function (req, res) {
     res.send("Sent " + count + " reminder emails");
 });
 
-app.get("/create-game", (req, res) => res.sendfile(__dirname + '/client/make-game.html') );
+app.get("/create-game", 
+    process.env.ADMIN_NAME ? gameListAuth : function (req, res, next) { next(); },
+    (req, res) => res.sendfile(__dirname + '/client/make-game.html') );
 
 app.post("/game", function(req, res) {
     let playerNames = [1,2,3,4,5].map(i =>  req.body[`name${i}`]);
