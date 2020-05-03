@@ -223,7 +223,7 @@ function UI(game) {
             if (yourTurn) {
                 ui.addChallengeButton();
             } else if (lastTurn.player == ui.playerNumber) {
-                ui.addTakeBackMoveButton();
+                // ui.addTakeBackMoveButton();
             }
         }
 
@@ -305,9 +305,9 @@ function UI(game) {
                 ui.removeMoveEditButtons();
                 if (typeof turn.whosTurn == 'number' && turn.type != 'challenge') {
                     displayWhosTurn(turn.whosTurn);
-                    if (turn.type == 'move' && turn.player == ui.playerNumber) {
-                        ui.addTakeBackMoveButton();
-                    }
+                    // if (turn.type == 'move' && turn.player == ui.playerNumber) {
+                    //     ui.addTakeBackMoveButton();
+                    // }
                     if (turn.whosTurn == ui.playerNumber && turn.type != 'takeBack') {
                         ui.notify('Your turn!', ui.players[turn.player].name + ' has made a move and now it is your turn.');
                         if (turn.type == 'move') {
