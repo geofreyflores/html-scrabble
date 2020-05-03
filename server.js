@@ -638,6 +638,10 @@ function playerHandler(handler) {
     });
 }
 
+app.delete("/game/:gameKey", (req, res) => {
+    db.set(req.params.gameKey, undefined);
+});
+
 app.get("/game/:gameKey/:playerKey", gameHandler(function (game, req, res) {
     res.cookie(req.params.gameKey, req.params.playerKey, { path: '/', maxAge: (30 * 24 * 60 * 60 * 1000) });
     res.redirect("/game/" + req.params.gameKey);
